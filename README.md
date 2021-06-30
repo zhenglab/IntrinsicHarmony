@@ -14,7 +14,7 @@ Here we provide PyTorch implementation and the trained model of our framework.
 - CPU or NVIDIA GPU + CUDA CuDNN
 
 ## Train/Test
-- Download [iHarmony4](https://github.com/bcmi/Image-Harmonization-Dataset-iHarmony4) dataset, and our HVIDIT dataset [Google Drive](https://drive.google.com/file/d/1-pa_9BNgIkuR0j1gcCxh8GI3XSWZN0e7/view?usp=sharing) or [BaiduCloud](https://pan.baidu.com/s/1DR600XJFhm8lqfHZ6mOU_A)(access code: akbi).
+- Download [iHarmony4](https://github.com/bcmi/Image-Harmonization-Dataset-iHarmony4) dataset, and our HVIDIT dataset [Google Drive](https://drive.google.com/file/d/1-pa_9BNgIkuR0j1gcCxh8GI3XSWZN0e7/view?usp=sharing) or [BaiduCloud](https://pan.baidu.com/s/1DR600XJFhm8lqfHZ6mOU_A) (access code: akbi).
 
 - Train a model:
 ```bash
