@@ -31,7 +31,7 @@ CUDA_VISIBLE_DEVICES=0 python test.py --model retinexltifpm  --name retinexltifp
 CUDA_VISIBLE_DEVICES=0 python test.py --model retinexltifpm  --name experiment  --dataset_root <dataset_dir> --dataset_name IHD --batch_size xx --init_port xxxx
 ```
 ## Evaluation
-We provide the code in ih_evaluation.py. Run:
+We provide the code in `ih_evaluation.py`. Run:
 ```bash
 CUDA_VISIBLE_DEVICES=0 python evaluation/ih_evaluation.py --dataroot <dataset_dir> --result_root  results/experiment/test_latest/images/ --evaluation_type our --dataset_name ALL
 ```
