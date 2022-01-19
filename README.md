@@ -5,7 +5,7 @@
 Zonghui Guo, Haiyong Zheng, Yufeng Jiang, Zhaorui Gu, Bing Zheng<br>
 
 
-Here we provide PyTorch implementation and the trained model of our framework.
+Here we provide PyTorch implementation and the pre-trained model of our framework.
 
 ## Prerequisites
 
@@ -26,7 +26,7 @@ CUDA_VISIBLE_DEVICES=0 python test.py --model retinexltifpm  --name retinexltifp
 ```
 
 ## Apply a pre-trained model
-- Download the pretrained model from [Google Drive](https://drive.google.com/drive/folders/1JyAzPDJkvYpeP6IpoD1kMuKMTWnOIDFu?usp=sharing) or [BaiduCloud](https://pan.baidu.com/s/1xlVIBuTcfdPOsTRNQWTRsQ) (access code: 20m6), and put net_G.pth in the directory checkpoints/experiment. Run:
+- Download the pre-trained model from [Google Drive](https://drive.google.com/drive/folders/1JyAzPDJkvYpeP6IpoD1kMuKMTWnOIDFu?usp=sharing) or [BaiduCloud](https://pan.baidu.com/s/1xlVIBuTcfdPOsTRNQWTRsQ) (access code: 20m6), and put `net_G.pth` in the directory `checkpoints/experiment`. Run:
 ```bash
 CUDA_VISIBLE_DEVICES=0 python test.py --model retinexltifpm  --name experiment  --dataset_root <dataset_dir> --dataset_name IHD --batch_size xx --init_port xxxx
 ```
