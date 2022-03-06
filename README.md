@@ -3,7 +3,7 @@
 
 # Delving Deep into Intrinsic Image Harmonization
 
-Here we provide the PyTorch implementation and pre-trained model of our latest version, if you require the code of our previous ICCV version (**["Intrinsic Image Harmonization"](https://openaccess.thecvf.com/content/CVPR2021/papers/Guo_Intrinsic_Image_Harmonization_CVPR_2021_paper.pdf)**), please click the **[release version](https://github.com/zhenglab/IntrinsicHarmony/releases/tag/v1.0)**.
+Here we provide the PyTorch implementation and pre-trained model of our latest version, if you require the code of our previous CVPR version (**["Intrinsic Image Harmonization"](https://openaccess.thecvf.com/content/CVPR2021/papers/Guo_Intrinsic_Image_Harmonization_CVPR_2021_paper.pdf)**), please click the **[release version](https://github.com/zhenglab/IntrinsicHarmony/releases/tag/v1.0)**.
 
 ## Prerequisites
 
