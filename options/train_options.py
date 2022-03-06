@@ -40,8 +40,5 @@ class TrainOptions(BaseOptions):
         parser.add_argument('--lr_decay_iters', type=int, default=50, help='multiply by a gamma every lr_decay_iters iterations')
         parser.add_argument('--save_iter_model', action='store_true', help='whether saves model by iteration')
 
-        
-
-
         self.isTrain = True
         return parser

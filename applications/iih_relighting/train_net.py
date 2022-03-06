@@ -102,12 +102,7 @@ def test(cfg):
         model.eval()
     ismaster = du.is_master_proc(cfg.NUM_GPUS)
 
-    fmse_score_list = []
-    mse_scores = 0
-    fmse_scores = 0
     num_image = 0
-    light_fake_arr = []
-    light_real_arr = []
     for i, data in enumerate(dataset):
         # if i > 1000:
         #     break
@@ -119,52 +114,17 @@ def test(cfg):
         if i % 5 == 0 and ismaster:  # save images to an HTML file
             print('processing (%04d)-th image... %s' % (i, img_path))
         visuals_ones = OrderedDict()
-        harmonized = None
-        real = None
         for j in range(len(img_path)):
             img_path_one = []
             for label, im_data in visuals.items():
                 if (label != "light_fake") and (label != "light_real"):
                     visuals_ones[label] = im_data[j:j+1, :, :, :]
             img_path_one.append(img_path[j])
-            # print(str(visuals['light_fake'][j:j+1,:].tolist()))
-            # light_fake_ones = img_path[j]+" = "+str(visuals['light_fake'][j].tolist())
-            # light_real_ones = img_path[j]+" = "+str(visuals['light_real'][j].tolist())
-            # light_fake_arr.append(light_fake_ones)
-            # light_real_arr.append(light_real_ones)
-            # del visuals_ones['light_fake']
-            # del visuals_ones['light_real']
             save_images(webpage, visuals_ones, img_path_one, aspect_ratio=cfg.aspect_ratio, width=cfg.display_winsize)
             num_image += 1
-            raw_name = img_path[j].split('/')[-1]
-            
-            # mse_score, fmse_score, score_str = evaluation(raw_name, visuals_ones['harmonized']*256, visuals_ones['real']*256, visuals_ones['mask'])
-            # # print(score_str)
-            # fmse_score_list.append(score_str)
-            # mse_scores += mse_score
-            # fmse_scores += fmse_score
             visuals_ones.clear()
 
     webpage.save()  # save the HTML
-    # mse_mu = mse_scores/num_image
-    # fmse_mu = fmse_scores/num_image
-    # mean_score = "%s MSE %0.2f | fMSE %0.2f" % (cfg.dataset_mode, mse_mu,fmse_mu)
-    # print(mean_score)
-    # fmse_score_list = sorted(fmse_score_list, key=lambda image: image[1], reverse=True)
-    save_fmse_root = os.path.join(cfg.results_dir, cfg.name)
-    # save_fmse_root = cfg.result_save_path[0:-19]
-    save_fmse_path = os.path.join(save_fmse_root,"light_fake_"+cfg.test_epoch+".txt")
 
-    # file=open(save_fmse_path,'w') 
-    # for line in light_fake_arr:
-    #     file.write(str(line)+"\n")
-    # file.close() 
-
-    save_fmse_path = os.path.join(save_fmse_root,"light_real_"+cfg.test_epoch+".txt")
-
-    # file=open(save_fmse_path,'w') 
-    # for line in light_real_arr:
-    #     file.write(str(line)+"\n")
-    # file.close() 
 
 

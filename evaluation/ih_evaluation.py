@@ -25,8 +25,6 @@ def parse_args():
 
     return parser.parse_args()
 
-
-
 def main(dataset_name = None):
     cuda = True if torch.cuda.is_available() else False
     IMAGE_SIZE = np.array([256,256])

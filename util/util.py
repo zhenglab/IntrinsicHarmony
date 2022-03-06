@@ -153,7 +153,6 @@ def rgbtogray(image):
     return input_r
 
 def gradient(input_tensor, direction):
-    # input_tensor = input_tensor.permute(0, 3, 1, 2)
     b,c,h, w = input_tensor.size()
 
     smooth_kernel_x = torch.reshape(torch.Tensor([[0., 0.], [-1., 1.]]), (1, 1, 2, 2)).repeat(1,c,1,1).to(input_tensor.get_device())

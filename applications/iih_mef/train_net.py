@@ -95,16 +95,10 @@ def test(cfg):
     # create a website
     web_dir = os.path.join(cfg.results_dir, cfg.name, '%s_%s' % (cfg.phase, cfg.epoch))  # define the website directory
     webpage = html.HTML(web_dir, 'Experiment = %s, Phase = %s, Epoch = %s' % (cfg.name, cfg.phase, cfg.epoch))
-    # test with eval mode. This only affects layers like batchnorm and dropout.
-    # For [pix2pix]: we use batchnorm and dropout in the original pix2pix. You can experiment it with and without eval() mode.
-    # For [CycleGAN]: It should not affect CycleGAN as CycleGAN uses instancenorm without dropout.
     if cfg.eval:
         model.eval()
     ismaster = du.is_master_proc(cfg.NUM_GPUS)
 
-    fmse_score_list = []
-    mse_scores = 0
-    fmse_scores = 0
     num_image = 0
     for i, data in enumerate(dataset):
         model.set_input(data)  # unpack data from data loader
@@ -115,8 +109,6 @@ def test(cfg):
         if i % 5 == 0 and ismaster:  # save images to an HTML file
             print('processing (%04d)-th image... %s' % (i, img_path))
         visuals_ones = OrderedDict()
-        harmonized = None
-        real = None
         for j in range(len(img_path)):
             img_path_one = []
             for label, im_data in visuals.items():
@@ -127,38 +119,11 @@ def test(cfg):
                 img_path_save = img_path_tmp.replace("/"+path_last, "/1_"+path_last)
             elif 'Dataset_Part2' in img_path_tmp:
                 img_path_save = img_path_tmp.replace("/"+path_last, "/2_"+path_last)
-            # print(img_path_save)
-            # assert 1==0
             img_path_one.append(img_path_save)
             save_images(webpage, visuals_ones, img_path_one, aspect_ratio=cfg.aspect_ratio, width=cfg.display_winsize)
             num_image += 1
-            # raw_name = img_path[j].split('/')[-1]
-            
-            # mse_score, fmse_score, score_str = evaluation(raw_name, visuals_ones['harmonized']*256, visuals_ones['real']*256, visuals_ones['mask'])
-            # # print(score_str)
-            # fmse_score_list.append(score_str)
-            # mse_scores += mse_score
-            # fmse_scores += fmse_score
             visuals_ones.clear()
 
     webpage.save()  # save the HTML
-    # mse_mu = mse_scores/num_image
-    # fmse_mu = fmse_scores/num_image
-    # mean_score = "%s MSE %0.2f | fMSE %0.2f" % (cfg.dataset_mode, mse_mu,fmse_mu)
-    # print(mean_score)
-    # fmse_score_list = sorted(fmse_score_list, key=lambda image: image[1], reverse=True)
-    # save_fmse_root = os.path.join(cfg.results_dir, cfg.name)
-    # # save_fmse_root = cfg.result_save_path[0:-19]
-    # save_fmse_path = os.path.join(save_fmse_root,"evaluation_detail_"+cfg.test_epoch+".txt")
-
-    # file=open(save_fmse_path,'w') 
-    # file.write(str(num_image))
-    # file.write('\n')
-    # file.write(mean_score)
-    # file.write('\n')
-    # # lists=[str(line)+"\n" for line in fmse_score_list]
-    # for line in fmse_score_list:
-    #     file.write(str(line)+"\n")
-    # file.close() 
 
 

@@ -79,6 +79,7 @@ class IIHBaseModel(BaseModel):
         self.backward_G()                   # calculate graidents for G
         self.optimizer_G.step()             # udpate G's weights
 
+
     def gradient_loss(self, input_1, input_2):
         g_x = self.criterionL1(util.gradient(input_1, 'x'), util.gradient(input_2, 'x'))
         g_y = self.criterionL1(util.gradient(input_1, 'y'), util.gradient(input_2, 'y'))
