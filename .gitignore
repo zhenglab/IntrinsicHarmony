@@ -131,3 +131,7 @@ dmypy.json
 .vscode/*
 checkpoints/*
 results/*
+applications/iih_enhancement/evaluation/enhance_evaluation.py
+applications/iih_enhancement/evaluation/pytorch_ssim.py
+applications/iih_mef/evaluation.py
+applications/iih_relighting/evaluation/relighting.py

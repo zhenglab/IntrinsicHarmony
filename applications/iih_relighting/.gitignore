@@ -1,0 +1,9 @@
+.vscode/*
+checkpoints/*
+results/*
+*/__pycache__/*
+tmp/*
+__pycache__/distribute.cpython-37.pyc
+__pycache__/options.cpython-37.pyc
+__pycache__/train_net.cpython-37.pyc
+__pycache__/train.cpython-37.pyc

@@ -3,9 +3,12 @@ import torch.nn as nn
 from torch.nn import init
 import torch.nn.functional as F
 import functools
+
 from torch.optim import lr_scheduler
 from torchvision import models
 from util.tools import *
+# from scipy.linalg import block_diag
+# from util import adain_update as adain_fun
 from util import util
 from . import networks as networks_init
 
@@ -14,91 +17,30 @@ from . import networks as networks_init
 # Helper Functions
 ###############################################################################
 
-def define_G(netG='base',init_type='normal', init_gain=0.02, opt=None):
+def define_G(netG='retinex',init_type='normal', init_gain=0.02, opt=None):
     """Create a generator
     """
-    if netG == 'base':
-        net = BaseGenerator(opt)
-    elif netG == 'base_lt':
-        net = BaseLTGenerator(opt)
-    elif netG == 'base_gd':
+    if netG == 'base_gd':
         net = BaseGDGenerator(opt)
-    elif netG == 'base_lt_gd':
-        net = BaseLTGDGenerator(opt)
     else:
         raise NotImplementedError('Generator model name [%s] is not recognized' % netG)
     net = networks_init.init_weights(net, init_type, init_gain)
     net = networks_init.build_model(opt, net)
     return net
+class Normalize(nn.Module):
+
+    def __init__(self, power=2):
+        super(Normalize, self).__init__()
+        self.power = power
+
+    def forward(self, x):
+        norm = x.pow(self.power).sum(1, keepdim=True).pow(1. / self.power)
+        out = x.div(norm + 1e-7)
+        return out
 
 ##############################################################################
 # Classes
 ##############################################################################
-class BaseGenerator(nn.Module):
-    def __init__(self, opt=None):
-        super(BaseGenerator, self).__init__()
-        self.reflectance_dim = 256
-        self.device = opt.device
-        r_enc_n_res = 4
-        r_dec_n_res = 0
-        i_enc_n_res = 4
-        i_dec_n_res = 0
-        self.reflectance_enc = ContentEncoder(opt.n_downsample, r_enc_n_res, opt.input_nc+1, self.reflectance_dim, opt.ngf, 'in', opt.activ, pad_type=opt.pad_type)
-        self.reflectance_dec = ContentDecoder(opt.n_downsample, r_dec_n_res, self.reflectance_enc.output_dim, opt.output_nc, opt.ngf, 'ln', opt.activ, pad_type=opt.pad_type)
-
-        self.illumination_enc = ContentEncoder(opt.n_downsample, i_enc_n_res, opt.input_nc+1, self.reflectance_dim, opt.ngf, 'in', opt.activ, pad_type=opt.pad_type)
-        self.illumination_dec = ContentDecoder(opt.n_downsample, i_dec_n_res, self.illumination_enc.output_dim, opt.output_nc, opt.ngf, 'ln', opt.activ, pad_type=opt.pad_type)
-
-    def forward(self, inputs, mask=None):
-        r_content = self.reflectance_enc(inputs)
-        i_content = self.illumination_enc(inputs)
-        reflectance = self.reflectance_dec(r_content)
-        
-        illumination = self.illumination_dec(i_content)
-        
-        reflectance = reflectance / 2 +0.5
-        illumination = illumination / 2 + 0.5
-        harmonized = reflectance*illumination
-
-        return harmonized, reflectance, illumination
-
-class BaseLTGenerator(nn.Module):
-    def __init__(self, opt=None):
-        super(BaseLTGenerator, self).__init__()
-        self.reflectance_dim = 256
-        self.device = opt.device
-        r_enc_n_res = 4
-        r_dec_n_res = 0
-        i_enc_n_res = 0
-        i_dec_n_res = 0
-
-        self.reflectance_enc = ContentEncoder(opt.n_downsample, r_enc_n_res, opt.input_nc+1, self.reflectance_dim, opt.ngf, 'in', opt.activ, pad_type=opt.pad_type)
-        self.reflectance_dec = ContentDecoder(opt.n_downsample, r_dec_n_res, self.reflectance_enc.output_dim, opt.output_nc, opt.ngf, 'ln', opt.activ, pad_type=opt.pad_type)
-
-        self.illumination_enc = ContentEncoder(opt.n_downsample, i_enc_n_res, opt.input_nc+1, self.reflectance_dim, opt.ngf, 'in', opt.activ, pad_type=opt.pad_type)
-        self.illumination_dec = ContentDecoder(opt.n_downsample, i_dec_n_res, self.illumination_enc.output_dim, opt.output_nc, opt.ngf, 'ln', opt.activ, pad_type=opt.pad_type)
-       
-        self.lighting = GlobalLighting(opt.n_downsample, opt.input_nc+1, opt.ngf, opt.light_mlp_dim, 'none', opt.activ, pad_type=opt.pad_type)
-        self.lightingRes = LightingResBlocks(opt.illumination_n_res, self.illumination_enc.output_dim, opt.light_mlp_dim, norm='ln', activation=opt.activ, pad_type=opt.pad_type)
-        
-
-    def forward(self, inputs, mask=None, mask_r=None):
-        
-        l_fg, l_bg = self.lighting(inputs, mask_r)
-
-        r_content = self.reflectance_enc(inputs)
-        i_content = self.illumination_enc(inputs)
-
-        reflectance = self.reflectance_dec(r_content)
-        reflectance = reflectance / 2 +0.5
-
-        i_content = self.lightingRes(i_content, l_fg, l_bg, mask_r)
-        illumination = self.illumination_dec(i_content)
-        illumination = illumination / 2 + 0.5
-        
-        harmonized = reflectance*illumination
-
-        return harmonized, reflectance, illumination
 
 class BaseGDGenerator(nn.Module):
     def __init__(self, opt=None):
@@ -109,27 +51,19 @@ class BaseGDGenerator(nn.Module):
         r_dec_n_res = 0
         i_enc_n_res = 4
         i_dec_n_res = 0
-        self.reflectance_enc = ContentEncoder(opt.n_downsample, r_enc_n_res, opt.input_nc+1, self.reflectance_dim, opt.ngf, 'in', opt.activ, pad_type=opt.pad_type)
+        self.reflectance_enc = ContentEncoder(opt.n_downsample, r_enc_n_res, opt.input_nc, self.reflectance_dim, opt.ngf, 'in', opt.activ, pad_type=opt.pad_type)
         self.reflectance_dec = ContentDecoder(opt.n_downsample, r_dec_n_res, self.reflectance_enc.output_dim, opt.output_nc, opt.ngf, 'ln', opt.activ, pad_type=opt.pad_type)
-
-        self.illumination_enc = ContentEncoder(opt.n_downsample, i_enc_n_res, opt.input_nc+1, self.reflectance_dim, opt.ngf, 'in', opt.activ, pad_type=opt.pad_type)
+        self.illumination_enc = ContentEncoder(opt.n_downsample, i_enc_n_res, opt.input_nc, self.reflectance_dim, opt.ngf, 'in', opt.activ, pad_type=opt.pad_type)
         self.illumination_dec = ContentDecoder(opt.n_downsample, i_dec_n_res, self.illumination_enc.output_dim, opt.output_nc, opt.ngf, 'ln', opt.activ, pad_type=opt.pad_type)
-
-        self.ifm = InharmonyfreeCAModule(opt.n_downsample+1, opt.ifm_n_res, opt.input_nc+1, self.reflectance_enc.output_dim, opt.ngf//2, opt.inharmonyfree_norm, opt.activ, pad_type=opt.pad_type)
-
+        self.ifm = InharmonyfreeCAModule(opt.n_downsample+1, opt.ifm_n_res, opt.input_nc, self.reflectance_enc.output_dim, opt.ngf//2, opt.inharmonyfree_norm, opt.activ, pad_type=opt.pad_type)
         self.reflectanceRec = HarmonyRecBlocks(opt.inharmonyfree_embed_layers, dim=self.reflectance_enc.output_dim)
-        self.illuminationRec = HarmonyRecBlocks(opt.inharmonyfree_embed_layers, dim=self.illumination_enc.output_dim)
-
-
-    def forward(self, inputs, mask_r, mask_r_32=None):
-
-        match_score, ifm_mean = self.ifm(inputs, mask_r_32)
+    def forward(self, inputs):
+        match_score, ifm_mean = self.ifm(inputs)
 
         r_content = self.reflectance_enc(inputs)
         i_content = self.illumination_enc(inputs)
 
-        r_content = self.reflectanceRec(r_content, fg_mask=mask_r, attScore=match_score)
-        i_content = self.illuminationRec(i_content, fg_mask=mask_r, attScore=match_score.detach())
+        r_content = self.reflectanceRec(r_content, attScore=match_score)
 
         reflectance = self.reflectance_dec(r_content)
         reflectance = reflectance / 2 +0.5
@@ -140,53 +74,7 @@ class BaseGDGenerator(nn.Module):
         harmonized = reflectance*illumination
 
         return harmonized, reflectance, illumination, ifm_mean
-
-class BaseLTGDGenerator(nn.Module):
-    def __init__(self, opt=None):
-        super(BaseLTGDGenerator, self).__init__()
-        self.reflectance_dim = 256
-        self.device = opt.device
-        r_enc_n_res = 4
-        r_dec_n_res = 0
-        i_enc_n_res = 0
-        i_dec_n_res = 0
-        self.reflectance_enc = ContentEncoder(opt.n_downsample, r_enc_n_res, opt.input_nc+1, self.reflectance_dim, opt.ngf, 'in', opt.activ, pad_type=opt.pad_type)
-        self.reflectance_dec = ContentDecoder(opt.n_downsample, r_dec_n_res, self.reflectance_enc.output_dim, opt.output_nc, opt.ngf, 'ln', opt.activ, pad_type=opt.pad_type)
-
-        self.illumination_enc = ContentEncoder(opt.n_downsample, i_enc_n_res, opt.input_nc+1, self.reflectance_dim, opt.ngf, 'in', opt.activ, pad_type=opt.pad_type)
-        self.illumination_dec = ContentDecoder(opt.n_downsample, i_dec_n_res, self.illumination_enc.output_dim, opt.output_nc, opt.ngf, 'ln', opt.activ, pad_type=opt.pad_type)
-       
-        self.lighting = GlobalLighting(opt.n_downsample, opt.input_nc+1, opt.ngf, opt.light_mlp_dim, 'none', opt.activ, pad_type=opt.pad_type)
-        self.lightingRes = LightingResBlocks(opt.illumination_n_res, self.illumination_enc.output_dim, opt.light_mlp_dim, norm='ln', activation=opt.activ, pad_type=opt.pad_type)
-
-        self.ifm = InharmonyfreeCAModule(opt.n_downsample+1, opt.ifm_n_res, opt.input_nc+1, self.reflectance_enc.output_dim, opt.ngf//2, opt.inharmonyfree_norm, opt.activ, pad_type=opt.pad_type)
-
-        self.reflectanceRec = HarmonyRecBlocks(opt.inharmonyfree_embed_layers, dim=self.reflectance_enc.output_dim)
-        self.illuminationRec = HarmonyRecBlocks(opt.inharmonyfree_embed_layers, dim=self.illumination_enc.output_dim)
-    def forward(self, inputs, mask_r=None, mask_r_32=None):
-        fg_pooling, bg_pooling= self.lighting(inputs, mask_r)
-        # match_score, ifm_mean = self.ifm(inputs, mask_r_32, self.lamda)
-        match_score, ifm_mean = self.ifm(inputs, mask_r_32)
-
-        r_content = self.reflectance_enc(inputs)
-        i_content = self.illumination_enc(inputs)
-        
-        r_content = self.reflectanceRec(r_content, fg_mask=mask_r, attScore=match_score)
-        
-        reflectance = self.reflectance_dec(r_content)
-        reflectance = reflectance / 2 +0.5
-
-        i_content = self.lightingRes(i_content, fg_pooling, bg_pooling, mask_r)
-        i_content = self.illuminationRec(i_content, fg_mask=mask_r, attScore=match_score.detach())
-        
-        illumination = self.illumination_dec(i_content)
-        illumination = illumination / 2 + 0.5
-        
-        harmonized = reflectance*illumination
-
-        return harmonized, reflectance, illumination, ifm_mean
-
-      
+    
 ##################################################################################
 # Encoder and Decoders
 ##################################################################################
@@ -216,6 +104,9 @@ class ContentDecoder(nn.Module):
         super(ContentDecoder, self).__init__()
         self.model = []
         dim = input_dim
+        # residual blocks
+        # self.model += [ResBlocks(n_res, dim, norm=norm, activation=activ, pad_type=pad_type)]
+
         # upsampling blocks
         for i in range(n_downsample):
             self.model += [
@@ -226,47 +117,11 @@ class ContentDecoder(nn.Module):
 
         self.model += [Conv2dBlock(dim, output_dim, 7, 1, 3, norm='none', activation='tanh', pad_type=pad_type)]
         self.model = nn.Sequential(*self.model)
+        self.output_dim = dim
 
     def forward(self, x):
         return self.model(x)
 
-class GlobalLighting(nn.Module):
-    def __init__(self, n_downsample, input_dim, dim, light_mlp_dim=8, norm=None, activ=None, pad_type='zero'):
-    
-        super(GlobalLighting, self).__init__()
-        self.model = []
-        self.model += [Conv2dBlock(input_dim, dim, 7, 1, 3, norm=norm, activation=activ, pad_type=pad_type)]
-        # downsampling blocks
-        for i in range(n_downsample):
-            self.model += [Conv2dBlock(dim, 2 * dim, 4, 2, 1, norm=norm, activation=activ, pad_type=pad_type)]
-            dim *= 2
-           
-        # residual blocks
-        # self.model += [ResBlocks(4, dim, norm=norm, activation=activ, pad_type=pad_type)]
-        # if not dim == output_dim:
-        #     self.model += [Conv2dBlock(dim, output_dim, 3, 1, 1, norm=norm, activation=activ, pad_type=pad_type)]
-        self.model = nn.Sequential(*self.model)
-        self.light_mlp = LinearBlock(dim, light_mlp_dim, norm='none', activation='none')
-
-    def forward(self, x, fg_mask):
-        x = self.model(x)
-        b,c,h,w = x.size()
-
-        fg_mask_sum = torch.sum(fg_mask.view(b, 1, -1), dim=2)
-        bg_mask_sum = h*w - fg_mask_sum+1e-8
-        fg_mask_sum = fg_mask_sum +1e-8
-        x_bg = x*(1-fg_mask)
-
-        # avg pooling to 1*1
-        x_bg_pooling = torch.sum(x_bg.view(b,c,-1), dim=2).div(bg_mask_sum)
-        l_bg = self.light_mlp(x_bg_pooling)
-
-        x_fg = x*fg_mask
-        x_fg_pooling = torch.sum(x_fg.view(b,c,-1), dim=2).div(fg_mask_sum)
-        l_fg = self.light_mlp(x_fg_pooling)
-
-        return l_fg, l_bg
-    
 class InharmonyfreeCAModule(nn.Module):
     def __init__(self, n_downsample, n_res, input_dim, output_dim, dim, norm, activ, pad_type, lamda=10):
         super(InharmonyfreeCAModule, self).__init__()
@@ -281,23 +136,25 @@ class InharmonyfreeCAModule(nn.Module):
         self.model = nn.Sequential(*self.model)
         self.in_normal = nn.InstanceNorm1d(1024)
 
-    def forward(self, x, fg_mask=None,lamda=10):
+    def forward(self, x,lamda=10):
         content = self.model(x)
         b,c,h,w = content.size()
 
-        fg = content*fg_mask
-        bg = content*(1-fg_mask)
+        fg = content
+        bg = content
         fg_patch = fg.view(b,c,-1).permute(0,2,1)
         bg_patch = bg.view(b,c,-1)
-
+       
         fg_patch_mu = torch.mean(fg_patch, dim=2, keepdim=True)
         bg_patch_mu = torch.mean(bg_patch, dim=1, keepdim=True)
-        fg_bg_conv = torch.matmul((fg_patch-fg_patch_mu), (bg_patch-bg_patch_mu))/(c-1)
+        fg_bg_conv = torch.matmul((fg_patch-fg_patch_mu), (bg_patch-bg_patch_mu))/(c-1) #此处协方差含有很多的0， softmax后全部会有值， 下一次将0的地方变成负无穷
         
-        match_score_soft = F.softmax(lamda * fg_bg_conv.permute(0,2,1), dim=1)
+        match_score_soft = F.softmax(lamda * fg_bg_conv.permute(0,2,1), dim=1)   #
         match_score_soft = match_score_soft.view(b, -1, h, w)
         content_mean = torch.mean(content, dim=1, keepdim=True)
         return match_score_soft, content_mean
+
+     
 
 ##################################################################################
 # Sequential Models
@@ -318,9 +175,9 @@ class LightingResBlocks(nn.Module):
         super(LightingResBlocks, self).__init__()
         self.resblocks = nn.ModuleList([LightingResBlock(dim, light_mlp_dim, norm=norm, activation=activation, pad_type=pad_type) for i in range(num_blocks)])
 
-    def forward(self, x, fg, bg, fg_mask):
+    def forward(self, x, light):
         for i, resblock in enumerate(self.resblocks):
-            x = resblock(x, fg, bg, fg_mask)
+            x = resblock(x, light)
 
         return x
 
@@ -329,9 +186,9 @@ class HarmonyRecBlocks(nn.Module):
         super(HarmonyRecBlocks, self).__init__()
         self.resblocks = nn.ModuleList([HarmonyRecBlock(stride=1, rate=2, channels=dim) for i in range(num_blocks)])
 
-    def forward(self, x, fg_mask=None, attScore=None):
+    def forward(self, x, attScore=None):
         for i, resblock in enumerate(self.resblocks):
-            x = resblock(x, fg_mask, attScore)
+            x = resblock(x, attScore)
         return x
 
 class MLP(nn.Module):
@@ -367,67 +224,6 @@ class ResBlock(nn.Module):
         out = self.model(x)
         out += residual
         return out
-
-class LightingResBlock(nn.Module):
-    def __init__(self, dim, light_mlp_dim, norm='in', activation='relu', pad_type='zero'):
-        super(LightingResBlock, self).__init__()
-        
-        self.lt_1 = Lighting(dim, light_mlp_dim, norm=norm, activation=activation, pad_type=pad_type)
-        self.conv_1 = nn.Conv2d(dim, dim, 3, 1)
-        self.lt_2 = Lighting(dim, light_mlp_dim, norm=norm, activation=activation, pad_type=pad_type)
-        self.conv_2 = nn.Conv2d(dim, dim, 3, 1)
-        self.norm = LayerNorm(dim)
-        self.pad = nn.ReflectionPad2d(1)
-
-    def forward(self, x, fg, bg, fg_mask):
-        residual = x
-        out_1 = self.actvn(self.norm(self.lt_1(self.conv_1(self.pad(x)), fg, bg, fg_mask)))
-        out = self.norm(self.lt_2(self.conv_2(self.pad(out_1)), fg, bg, fg_mask))
-        out += residual
-        return out
-
-    def actvn(self, x):
-        return F.leaky_relu(x, 2e-1)
-
-class Lighting(nn.Module):
-    def __init__(self, dim, light_mlp_dim, norm='ln', activation='relu', pad_type='zero'):
-        super(Lighting, self).__init__()
-
-        self.light_mlp = LinearBlock(light_mlp_dim, 4*dim, norm='none', activation=activation)
-        self.rgb_model = Conv2dBlock(dim ,dim*3, 3, 1, 1, norm='grp', activation=activation, pad_type=pad_type, groupcount=3)
-
-        self.dim = dim
-
-    def forward(self, x, fg, bg, fg_mask):
-        residual = x
-        b,c,h,w = x.size()
-        illu_fg_color_ratio, illu_fg_intensity = self.illumination_extract(fg)
-        illu_bg_color_ratio, illu_bg_intensity = self.illumination_extract(bg)
-        
-        illu_color_ratio = illu_bg_color_ratio.div(illu_fg_color_ratio+1e-8)
-        illu_intensity = illu_bg_intensity - illu_fg_intensity
-        b,c,h,w = x.size()
-
-        x_rgb = self.rgb_model(x)
-        x_rgb = x_rgb.view(b,3,c,h, w)
-        illu_color_ratio = illu_color_ratio.view(b, 3, c, 1, 1).expand_as(x_rgb)
-        x_t_c = torch.sum(x_rgb*illu_color_ratio, dim=1)
-
-        illu_intensity = illu_intensity.view(b,c,1,1).expand_as(x)
-
-        x_t = x_t_c + illu_intensity
-        
-        output = residual*(1-fg_mask)+x_t*fg_mask
-        return output
-
-    
-    def illumination_extract(self, x):
-        b = x.size(0)
-        illumination = self.light_mlp(x)
-        illu_intensity = illumination[:, :self.dim]
-        illu_color = illumination[:, self.dim:].view(b, 3, self.dim)
-        illu_color_ratio = torch.softmax(illu_color,dim=1)
-        return illu_color_ratio, illu_intensity
 
 class Conv2dBlock(nn.Module):
     def __init__(self, input_dim ,output_dim, kernel_size, stride,
@@ -609,6 +405,7 @@ class LinearBlock(nn.Module):
 ##################################################################################
 # Normalization layers
 ##################################################################################
+
 class LayerNorm(nn.Module):
     def __init__(self, num_features, eps=1e-5, affine=True):
         super(LayerNorm, self).__init__()
@@ -709,9 +506,10 @@ class HarmonyRecBlock(nn.Module):
         self.kernel = 2 * rate
         self.stride = stride
         self.rate = rate
+        #v.1
         self.harmonyRecConv = Conv2dBlock(channels*2, channels, 3, 1, 1, norm='none', activation='relu', pad_type='reflect')
 
-    def forward(self, bg_in, fg_mask=None, attScore=None):
+    def forward(self, bg_in, attScore=None):
         b, dims, h, w = bg_in.size()
         
         # raw_w is extracted for reconstruction
@@ -729,6 +527,7 @@ class HarmonyRecBlock(nn.Module):
             CA = attScore[ib:ib+1, :, :, :]
             k2 = raw_w[ib, :, :, :, :]
             ACLt = F.conv_transpose2d(CA, k2, stride=self.rate, padding=1)
+            # ACLt = ACLt / (self.ksize ** 2)
             ACLt = ACLt / 4
             if ib == 0:
                 ACL = ACLt

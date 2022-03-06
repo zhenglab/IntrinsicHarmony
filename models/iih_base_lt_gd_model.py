@@ -8,17 +8,15 @@ from util import util
 from . import harmony_networks as networks
 import util.ssim as ssim
 
-class retinexltifpmModel(BaseModel):
+class IIHBaseLTGDModel(BaseModel):
     @staticmethod
     def modify_commandline_options(parser, is_train=True):
-        
-        # changing the default values to match the pix2pix paper (https://phillipi.github.io/pix2pix/)
-        parser.set_defaults(norm='instance', netG='retinex_ltm_ifm', dataset_mode='ihd')
+        parser.set_defaults(norm='instance', netG='base_lt_gd', dataset_mode='ihd')
         if is_train:
             parser.add_argument('--lambda_L1', type=float, default=100.0, help='weight for L1 loss')
-            parser.add_argument('--lambda_R_gradient', type=float, default=10., help='weight for reflectance gradient loss')
-            parser.add_argument('--lambda_I_L2', type=float, default=1., help='weight for illumination L2 loss')
-            parser.add_argument('--lambda_I_smooth', type=float, default=10, help='weight for Illumination smooth loss')
+            parser.add_argument('--lambda_R_gradient', type=float, default=20., help='weight for reflectance gradient loss')
+            parser.add_argument('--lambda_I_L2', type=float, default=10, help='weight for illumination L2 loss')
+            parser.add_argument('--lambda_I_smooth', type=float, default=1, help='weight for Illumination smooth loss')
             parser.add_argument('--lambda_ifm', type=float, default=100, help='weight for pm loss')
             
         return parser

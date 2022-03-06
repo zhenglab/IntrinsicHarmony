@@ -13,16 +13,18 @@ You need to implement the following functions:
 """
 import os.path
 import torch
+import random
 import torchvision.transforms.functional as tf
+import torch.nn.functional as F
 from data.base_dataset import BaseDataset, get_transform
 from data.image_folder import make_dataset
 from PIL import Image
 import numpy as np
+from scipy import io
 import torchvision.transforms as transforms
-from scipy import sparse
 from util import util
 
-class RealDataset(BaseDataset):
+class DPRTransferDataset(BaseDataset):
     """A template dataset class for you to implement custom datasets."""
     @staticmethod
     def modify_commandline_options(parser, is_train):
@@ -49,28 +51,49 @@ class RealDataset(BaseDataset):
         - save the options (have been done in BaseDataset)
         - get image paths and meta information of the dataset.
         - define the image transformation.
-        """ 
+        """
         # save the option and dataset root
         BaseDataset.__init__(self, opt)
         self.image_paths = []
         self.isTrain = opt.isTrain
         self.image_size = opt.crop_size
+        self.real_image_paths = []
+        self.dir_paths = []
         if opt.isTrain==True:
             print('loading training file')
-            self.trainfile = opt.dataset_root+opt.dataset_name+'_train.txt'
+            self.trainfile = opt.dataset_root+'train.lst'
+            last_dir = ""
             with open(self.trainfile,'r') as f:
-                    for line in f.readlines():
-                        self.image_paths.append(os.path.join(opt.dataset_root,'composite_images',line.rstrip()))
+                for line in f.readlines():
+                    file_names = line.rstrip()
+                    file_name_arr = file_names.split(" ")
+                    if file_name_arr[1] != file_name_arr[2]:
+                        self.image_paths.append(os.path.join(opt.dataset_root,'DPR_dataset',file_name_arr[0],file_name_arr[1]))
+                        self.real_image_paths.append(os.path.join(opt.dataset_root,'DPR_dataset',file_name_arr[0],file_name_arr[2]))
+                        if last_dir != file_name_arr[0]:
+                            last_dir = file_name_arr[0]
+                            self.dir_paths.append(file_name_arr[0])
         elif opt.isTrain==False:
+            #self.real_ext='.jpg'
             print('loading test file')
-            self.trainfile = opt.dataset_root+opt.dataset_name+'_test.txt'
+            # self.trainfile = opt.dataset_root+'test.lst'
+            self.trainfile = opt.dataset_root+'randomdprtgt_test.txt'
             with open(self.trainfile,'r') as f:
-                    for line in f.readlines():
-                        self.image_paths.append(os.path.join(opt.dataset_root,'composite_images',line.rstrip()))
+                for line in f.readlines():
+                    file_names = line.rstrip()
+                    file_name_arr = file_names.split(" ")
+                    self.image_paths.append(os.path.join(opt.dataset_root,'DPR_dataset',file_name_arr[0]))
+                    self.real_image_paths.append(os.path.join(opt.dataset_root,'DPR_dataset',file_name_arr[1]))
+            
         # get the image paths of your dataset;
           # You can call sorted(make_dataset(self.root, opt.max_dataset_size)) to get all the image paths under the directory self.root
         # define the default transform function. You can use <base_dataset.get_transform>; You can also define your custom transform function
-        self.transform = get_transform(opt)
+        transform_list = [
+            transforms.Resize([256,256]),
+            transforms.ToTensor(),
+            transforms.Normalize((0, 0, 0), (1, 1, 1))
+        ]
+        self.transforms = transforms.Compose(transform_list)
 
     def __getitem__(self, index):
         """Return a data point and its metadata information.
@@ -86,23 +109,47 @@ class RealDataset(BaseDataset):
         Step 3: convert your data to a PyTorch tensor. You can use helpder functions such as self.transform. e.g., data = self.transform(image)
         Step 4: return a data point as a dictionary.
         """
+        
         path = self.image_paths[index]
-        mask_path = self.image_paths[index].replace('composite_images','masks')
+        real_path = self.real_image_paths[index]
+        fake_path = path
+        fake_light_path = fake_path.replace('_0', "_light_0").replace(".png",".txt")
+        real_light_path = real_path.replace('_0', "_light_0").replace(".png",".txt")
+        fake = Image.open(fake_path).convert('RGB')
+        real = Image.open(real_path).convert('RGB')
 
-        comp = Image.open(path).convert('RGB')
-        mask = Image.open(mask_path).convert('1')
+        fake_light = np.loadtxt(fake_light_path)
+        fake_light = fake_light[0:9]
+        fake_light = np.squeeze(fake_light).astype(np.float32)
+        fake_light = torch.from_numpy(fake_light)
 
-        if np.random.rand() > 0.5 and self.isTrain:
-            comp, mask = tf.hflip(comp), tf.hflip(mask)
+        real_light = np.loadtxt(real_light_path)
+        real_light = real_light[0:9]
+        real_light = np.squeeze(real_light).astype(np.float32)
+        real_light = torch.from_numpy(real_light)
+        fake = self.transforms(fake).to(torch.float32)
+        real = self.transforms(real).to(torch.float32)
 
-        comp = tf.resize(comp, [self.image_size, self.image_size])
-        mask = tf.resize(mask, [self.image_size, self.image_size])
-        comp = self.transform(comp)
-        mask = tf.to_tensor(mask)
-        inputs=torch.cat([comp,mask],0)
+        real_path_tmp = real_path.split("/")
+        path = path[:-4]+"-"+real_path_tmp[-1]
 
-        return {'inputs': inputs, 'comp': comp, 'real': comp,'img_path':path,'mask':mask}
+
+        # target_num = random.randint(0, len(self.dir_paths)-1)
+        # target_dir = self.dir_paths[target_num]
+        # real_path_arr = real_path.split("/")
+        # target_path = real_path.replace(real_path_arr[-2], target_dir)
+        # target = Image.open(target_path).convert('RGB')
+        # target = self.transforms(target).to(torch.float32)
+        # target_light_path = target_path.replace('_0', "_light_0").replace(".png",".txt")
+        # target_light = np.loadtxt(target_light_path)
+        # target_light = target_light[0:9]
+        # target_light = np.squeeze(target_light).astype(np.float32)
+        # target_light = torch.from_numpy(target_light)
+
+        return {'fake_light': fake_light, 'real_light':real_light, 'target_light':real_light, 'fake': fake, 'target':real, 'real':real, 'img_path':path}
 
     def __len__(self):
         """Return the total number of images."""
         return len(self.image_paths)
+
+

@@ -23,19 +23,24 @@ class BaseOptions():
         parser.add_argument('--dataset_name',type=str, default='IHD', help='path to our dataset IHD')
         parser.add_argument('--dataset_root',type=str, default='../../datasets/ihd_datasets/all/', help='path to our dataset IHD')
         parser.add_argument('--name', type=str, default='experiment_name', help='name of the experiment. It decides where to store samples and models')
+        parser.add_argument('--gpu_ids', type=str, default='0', help='gpu ids: e.g. 0  0,1,2, 0,2. use -1 for CPU')
         parser.add_argument('--checkpoints_dir', type=str, default='./checkpoints', help='models are saved here')
         # model parameters
-        parser.add_argument('--model', type=str, default='retinexltifpm', help='chooses which model to use. [retinexltifpm]')
+        parser.add_argument('--model', type=str, default='unetattloss', help='chooses which model to use. [cycle_gan | pix2pix | test | colorization]')
         parser.add_argument('--input_nc', type=int, default=3, help='# of input image channels: 3 for RGB and 1 for grayscale')
         parser.add_argument('--output_nc', type=int, default=3, help='# of output image channels: 3 for RGB and 1 for grayscale')
         parser.add_argument('--ngf', type=int, default=64, help='# of gen filters in the last conv layer')
+        parser.add_argument('--ndf', type=int, default=64, help='# of discrim filters in the first conv layer')
+        parser.add_argument('--netD', type=str, default='n_layers', help='specify discriminator architecture [basic | n_layers | pixel|sn]. The basic model is a 70x70 PatchGAN. n_layers allows you to specify the layers in the discriminator')
         parser.add_argument('--netG', type=str, default='resnet_9blocks', help='specify generator architecture [resnet_9blocks | resnet_6blocks | unet_256 | unet_128]')
+        parser.add_argument('--n_layers_D', type=int, default=3, help='only used if netD==n_layers')
         parser.add_argument('--norm', type=str, default='instance', help='instance normalization or batch normalization [instance | batch | none]')
         parser.add_argument('--init_type', type=str, default='normal', help='network initialization [normal | xavier | kaiming | orthogonal]')
         parser.add_argument('--init_gain', type=float, default=0.02, help='scaling factor for normal, xavier and orthogonal.')
         parser.add_argument('--no_dropout', action='store_true', help='no dropout for the generator')
         # dataset parameters
-        parser.add_argument('--dataset_mode', type=str, default='ihd', help='chooses how datasets are loaded.')
+        parser.add_argument('--dataset_mode', type=str, default='subihd', help='chooses how datasets are loaded. [unaligned | aligned | single | colorization]')
+        parser.add_argument('--direction', type=str, default='AtoB', help='AtoB or BtoA')
         parser.add_argument('--serial_batches', action='store_true', help='if true, takes images in order to make batches, otherwise takes them randomly')
         parser.add_argument('--num_threads', default=4, type=int, help='# threads for loading data')
         parser.add_argument('--batch_size', type=int, default=1, help='input batch size')
@@ -52,24 +57,26 @@ class BaseOptions():
         parser.add_argument('--suffix', default='', type=str, help='customized suffix: opt.name = opt.name + suffix: e.g., {model}_{netG}_size{load_size}')
 
         parser.add_argument('--n_downsample', type=int, default=2, help='min 2')
-        parser.add_argument('--r_enc_n_res', type=int, default=4, help='reflectance encoder resblock layers')
-        parser.add_argument('--r_dec_n_res', type=int, default=0, help='reflectance decoder resblock layers')
-        parser.add_argument('--i_enc_n_res', type=int, default=0, help='illumination encoder resblock layers')
-        parser.add_argument('--i_dec_n_res', type=int, default=0, help='illumination decoder resblock layers')
+        parser.add_argument('--r_dec_n_res', type=int, default=4, help='resblocks')
+        parser.add_argument('--r_enc_n_res', type=int, default=0, help='resblocks')
+        parser.add_argument('--s_dec_n_res', type=int, default=4, help='resblocks')
+        parser.add_argument('--s_enc_n_res', type=int, default=0, help='resblocks')
         parser.add_argument('--pad_type', type=str, default='reflect', help='pad_type')
         parser.add_argument('--activ', type=str, default='lrelu', help='activ')
 
-        parser.add_argument('--light_mlp_dim', type=int, default=8, help='light dimensions')
-        parser.add_argument('--illumination_n_res', type=int, default=4, help='light transfer layers')
+        parser.add_argument('--light_mlp_dim', type=int, default=8, help='resblocks')
+        parser.add_argument('--illumination_n_res', type=int, default=4, help='attention patch size')
 
-        parser.add_argument('--inharmonyfree_norm', type=str, default='ln', help='inharmonyfree encoder norm type')
-        parser.add_argument('--ifm_n_res', type=int, default=0, help='inharmonyfree resblock layers')
-        parser.add_argument('--inharmonyfree_embed_layers', type=int, default=2, help='inharmonyfree block layers')
+        parser.add_argument('--inharmonyfree_norm', type=str, default='ln', help='attention patch size')
+        parser.add_argument('--ifm_n_res', type=int, default=0, help='inharmonyfree_ res')
+        parser.add_argument('--inharmonyfree_embed_layers', type=int, default=2, help='inharmonyfree_embed_layers')
+        
+        parser.add_argument('--illumination_ifm', action='store_true', help='if true, shading use ifm')
+
         parser.add_argument('--lamda', type=int, default=10, help='lamda')
         parser.add_argument('--loss_RH', action='store_true', help='whether saves model by iteration')
         parser.add_argument('--loss_IS', action='store_true', help='whether saves model by iteration')
         parser.add_argument('--loss_IH', action='store_true', help='whether saves model by iteration')
-
 
         parser.add_argument('--local_rank', type=int, default=-1, help='number of GPUs to use')
         parser.add_argument('--init_method', type=str, default='tcp://127.0.0.1:', help='process port')
@@ -146,6 +153,16 @@ class BaseOptions():
             opt.name = opt.name + suffix
 
         self.print_options(opt)
+
+        # set gpu ids
+        # str_ids = opt.gpu_ids.split(',')
+        # opt.gpu_ids = []
+        # for str_id in str_ids:
+        #     id = int(str_id)
+        #     if id >= 0:
+        #         opt.gpu_ids.append(id)
+        # if len(opt.gpu_ids) > 0:
+        #     torch.cuda.set_device(opt.gpu_ids[0])
         opt.init_method = opt.init_method+opt.init_port
         
         self.opt = opt
